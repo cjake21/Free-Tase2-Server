@@ -1,0 +1,51 @@
+FreeTASE2 Server - captured TASE.2/ICCP traffic
+================================================
+
+Capture: docs/tase2_iccp.pcap
+  server 10.20.0.10:102  <-  client 10.20.0.20  (network-namespace lab)
+
+Protocol hierarchy (tshark -r tase2_iccp.pcap -q -z io,phs):
+------------------------------------------------------------
+eth                                      frames:62 bytes:7143
+  ip                                     frames:62 bytes:7143
+    tcp                                  frames:62 bytes:7143
+      tpkt                               frames:43 bytes:5873
+        cotp                             frames:43 bytes:5873
+          ses                            frames:41 bytes:5697
+            pres                         frames:2 bytes:462
+              acse                       frames:2 bytes:462
+                mms                      frames:2 bytes:462
+                mms                      frames:39 bytes:5235
+                  mms.response_to        frames:13 bytes:1288
+                    mms.response_time    frames:13 bytes:1288
+
+MMS PDU / service mix (tshark _ws.col.Info, blank lines = unconfirmed reports):
+------------------------------------------------------------
+     17 <unconfirmed InformationReport>
+      7 SetDataValueResponse 
+      4 GetDataValueResponse success
+      2 GetDataValueRequest 
+      1 SetDataValueRequest  TestDomain dev1$Tag
+      1 SetDataValueRequest  TestDomain dev1$Command
+      1 SetDataValueRequest  TestDomain DSTransferSet01$Status
+      1 SetDataValueRequest  TestDomain DSTransferSet01$RBE
+      1 SetDataValueRequest  TestDomain DSTransferSet01$Interval
+      1 SetDataValueRequest  TestDomain DSTransferSet01$DataSetName
+      1 SetDataValueRequest  TestDomain DSTransferSet01$DSConditionsRequested
+      1 GetDataValueRequest  TestDomain Next_DSTransfer_Set
+      1 GetDataValueRequest  TestDomain Bilateral_Table_ID
+      1 Associate Response
+      1 Associate Request
+
+TASE.2 object names visible on the wire:
+------------------------------------------------------------
+  - Bilateral_Table_ID
+  - DSTransferSet01$DSConditionsRequested
+  - DSTransferSet01$DataSetName
+  - DSTransferSet01$Interval
+  - DSTransferSet01$RBE
+  - DSTransferSet01$Status
+  - Next_DSTransfer_Set
+  - TestDomain
+  - dev1$Command
+  - dev1$Tag

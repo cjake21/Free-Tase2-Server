@@ -1,0 +1,31 @@
+[client] connecting to 127.0.0.1:10502 (domain TestDomain)
+[client] associated.
+[client] Block 1: bilateral-table negotiation
+  read TASE2_Version          = {2000,8}
+  read Supported_Features     = 1100100000000000
+  read Bilateral_Table_ID     = TestBilTab
+  read Next_DSTransfer_Set    = {8,8,DSTransferSet01}
+[client] Block 1: creating data set 'ds_analog' = {tm1, tm2}
+  defineNamedVariableList -> err 0
+[client] Block 2: configuring DSTransferSet01 (interval+integrity RBE)
+  write DSTransferSet01$DataSetName    -> err 0
+  write DSTransferSet01$Interval       -> err 0
+  write DSTransferSet01$DSConditionsRequested -> err 0
+  write DSTransferSet01$RBE            -> err 0
+  write DSTransferSet01$Status         -> err 0
+[client] Block 5: operate device control dev1
+  write dev1$Tag                       -> err 0
+  write dev1$Command                   -> err 0
+[client] listening for transfer-set reports for 12s (Ctrl+C to stop)
+[report #1] list DSTransferSet01 = {DSTransferSet01,20260530113114.644Z,4,{13.823213,00000000},{24.728682,00000000}}
+[report #2] list DSTransferSet01 = {DSTransferSet01,20260530113115.784Z,4,{14.586781,00000000},{24.523388,00000000}}
+[report #3] list DSTransferSet01 = {DSTransferSet01,20260530113116.808Z,2,{15.207355,00000000},{24.266684,00000000}}
+[report #4] list DSTransferSet01 = {DSTransferSet01,20260530113117.907Z,4,{15.660195,00000000},{23.963800,00000000}}
+[report #5] list DSTransferSet01 = {DSTransferSet01,20260530113118.984Z,4,{15.927249,00000000},{23.620907,00000000}}
+[report #6] list DSTransferSet01 = {DSTransferSet01,20260530113120.187Z,4,{15.997868,00000000},{23.244989,00000000}}
+[report #7] list DSTransferSet01 = {DSTransferSet01,20260530113121.288Z,4,{15.869238,00000000},{22.843708,00000000}}
+[report #8] list DSTransferSet01 = {DSTransferSet01,20260530113122.422Z,2,{15.546487,00000000},{22.425238,00000000}}
+[report #9] list DSTransferSet01 = {DSTransferSet01,20260530113123.422Z,4,{15.042482,00000000},{21.998104,00000000}}
+[report #10] list DSTransferSet01 = {DSTransferSet01,20260530113124.477Z,4,{14.377316,00000000},{21.571007,00000000}}
+[report #11] list DSTransferSet01 = {DSTransferSet01,20260530113125.481Z,4,{13.577507,00000000},{21.152651,00000000}}
+[client] received 11 report(s); closing.

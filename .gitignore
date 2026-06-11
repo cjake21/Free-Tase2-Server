@@ -1,0 +1,11 @@
+# cloned + built libIEC61850
+deps/
+
+# built tools
+src/tase2_server
+src/tase2_client
+src/tase2_probe
+
+# captures / scratch
+*.pcap
+*.o

@@ -46,6 +46,7 @@
 #include "mms_type_spec.h"
 #include "linked_list.h"
 #include "hal_thread.h"
+#include "tls_config.h"             /* TLS / Secure ICCP (optional, -T) */
 
 /* libIEC61850 internal MMS server headers (not installed; included from the
  * source tree via -I in the Makefile). These expose the low-level model and
@@ -78,6 +79,10 @@ typedef struct {
     const char* domainName;
     const char* bltId;
     int         integritySeconds;
+    int         tls;                /* -T : serve over TLS (Secure ICCP) */
+    const char* certFile;           /* -C : server certificate (PEM) */
+    const char* keyFile;            /* -K : server private key (PEM) */
+    const char* caFile;             /* -A : CA used to validate client certs */
 } Tase2Config;
 
 /* Server state */
@@ -525,6 +530,10 @@ parseArgs(int argc, char** argv)
     g_cfg.domainName = TASE2_DEFAULT_DOMAIN;
     g_cfg.bltId = TASE2_DEFAULT_BLT_ID;
     g_cfg.integritySeconds = 30;
+    g_cfg.tls = 0;
+    g_cfg.certFile = NULL;
+    g_cfg.keyFile = NULL;
+    g_cfg.caFile = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-i") && i + 1 < argc) g_cfg.bindIp = argv[++i];
@@ -532,8 +541,13 @@ parseArgs(int argc, char** argv)
         else if (!strcmp(argv[i], "-d") && i + 1 < argc) g_cfg.domainName = argv[++i];
         else if (!strcmp(argv[i], "-b") && i + 1 < argc) g_cfg.bltId = argv[++i];
         else if (!strcmp(argv[i], "-t") && i + 1 < argc) g_cfg.integritySeconds = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "-T")) g_cfg.tls = 1;
+        else if (!strcmp(argv[i], "-C") && i + 1 < argc) g_cfg.certFile = argv[++i];
+        else if (!strcmp(argv[i], "-K") && i + 1 < argc) g_cfg.keyFile = argv[++i];
+        else if (!strcmp(argv[i], "-A") && i + 1 < argc) g_cfg.caFile = argv[++i];
         else if (!strcmp(argv[i], "-h")) {
-            printf("usage: %s [-i bindIp] [-p port] [-d domain] [-b bltId] [-t integritySecs]\n", argv[0]);
+            printf("usage: %s [-i bindIp] [-p port] [-d domain] [-b bltId] [-t integritySecs]\n"
+                   "          [-T] [-C serverCert.pem] [-K serverKey.pem] [-A caCert.pem]\n", argv[0]);
             exit(0);
         }
     }
@@ -551,7 +565,19 @@ main(int argc, char** argv)
 
     buildModel();
 
-    g_server = MmsServer_create(g_device, NULL);
+    TLSConfiguration tlsConfig = NULL;
+    if (g_cfg.tls) {
+        tlsConfig = TLSConfiguration_create();
+        if (g_cfg.certFile) TLSConfiguration_setOwnCertificateFromFile(tlsConfig, g_cfg.certFile);
+        if (g_cfg.keyFile)  TLSConfiguration_setOwnKeyFromFile(tlsConfig, g_cfg.keyFile, NULL);
+        if (g_cfg.caFile)   TLSConfiguration_addCACertificateFromFile(tlsConfig, g_cfg.caFile);
+        /* if a CA is given, require + validate client certs (mutual TLS) */
+        TLSConfiguration_setChainValidation(tlsConfig, g_cfg.caFile ? true : false);
+        TLSConfiguration_setAllowOnlyKnownCertificates(tlsConfig, false);
+        printf("[tase2] TLS / Secure ICCP enabled\n");
+    }
+
+    g_server = MmsServer_create(g_device, tlsConfig);
     MmsServer_setMaxConnections(g_server, 10);
     MmsServer_enableDynamicNamedVariableListService(g_server, true);
     MmsServer_setMaxDomainSpecificDataSets(g_server, 32);

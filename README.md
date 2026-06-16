@@ -209,6 +209,10 @@ If you'd rather watch each side, use three terminals: capture in one,
 ```bash
 src/tase2_server -i <bindIp> -p <port> -d <domain> -b <bltId> -t <integritySecs>
 # defaults: all interfaces, port 102, domain TestDomain, blt TestBilTab, integrity 30s
+
+# over TLS (Secure ICCP): -T turns it on, -C/-K are the server cert and key,
+# -A is the CA used to validate client certificates (mutual TLS)
+src/tase2_server -i <bindIp> -p <port> -T -C server.pem -K server.key -A ca.pem
 ```
 
 Then point any TASE.2 client at it: the bundled `tase2_client`, a commercial test
@@ -242,7 +246,8 @@ unconfirmed-PDU (the Block 2 report-by-exception reports).
   association, object names, service types, and report framing are accurate;
   that's what matters for capture and parser work. Tightening the value
   encodings is future work.
-- TLS (Secure ICCP) isn't enabled in this build.
+- TLS (Secure ICCP) is optional: pass `-T` with a cert (`-C`), key (`-K`) and CA
+  (`-A`) to serve over TLS. It requires libIEC61850 built with the mbedtls backend.
 - The FreeTase2 (Python) client path is experimental; the C `tase2_client` is the
   supported driver.
 

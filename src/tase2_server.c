@@ -83,6 +83,9 @@ typedef struct {
     const char* certFile;           /* -C : server certificate (PEM) */
     const char* keyFile;            /* -K : server private key (PEM) */
     const char* caFile;             /* -A : CA used to validate client certs */
+    int         overrideHoldSeconds;/* -o : hold a written tm/ts value this long
+                                     *      before simulation resumes (0 = never
+                                     *      override; simulation always wins) */
 } Tase2Config;
 
 /* Server state */
@@ -116,6 +119,34 @@ static MmsValue* g_ts1 = NULL;  /* StateQ { s, q } */
 static MmsValue* g_ts2 = NULL;
 static MmsValue* g_tsTimeStamp = NULL;        /* Transfer_Set_Time_Stamp */
 static MmsValue* g_dsConditionsDetected = NULL;
+
+/* False-data-injection override: a client write to an indication point holds that
+ * point's value (suspending the simulation for it) until this wall-clock time, so an
+ * injected value actually propagates to the BA in reports before the sim resumes.
+ * Indexed tm1, tm2, ts1, ts2; 0 = not overridden. */
+static uint64_t g_overrideUntil[4] = {0, 0, 0, 0};
+
+static int
+pointIndex(const char* base)
+{
+    if (!strcmp(base, "tm1")) return 0;
+    if (!strcmp(base, "tm2")) return 1;
+    if (!strcmp(base, "ts1")) return 2;
+    if (!strcmp(base, "ts2")) return 3;
+    return -1;
+}
+
+static const char* pointName(int i)
+{
+    static const char* names[4] = {"tm1", "tm2", "ts1", "ts2"};
+    return (i >= 0 && i < 4) ? names[i] : "?";
+}
+
+static MmsValue* pointCell(int i)
+{
+    switch (i) { case 0: return g_tm1; case 1: return g_tm2;
+                 case 2: return g_ts1; case 3: return g_ts2; default: return NULL; }
+}
 
 /* Small helpers for building MmsVariableSpecification type trees */
 
@@ -412,6 +443,34 @@ writeHandler(void* parameter, MmsDomain* domain, const char* variableId,
         return DATA_ACCESS_ERROR_SUCCESS;
     }
 
+    /* False-data injection: a client write to an indication point's Value applies
+     * the injected value and holds it (suspending simulation for that point) for the
+     * configured window, so the falsified value reaches the BA in reports. With the
+     * window at 0 the write is still accepted, but the simulation overwrites it. */
+    {
+        int pi = pointIndex(baseName);
+        if (pi >= 0 && (member == NULL || strcmp(member, "Value") == 0)) {
+            MmsValue* cell = pointCell(pi);
+            if (cell && g_cfg.overrideHoldSeconds > 0) {
+                MmsValue* el = MmsValue_getElement(cell, 0);
+                if (el) {
+                    if (MmsValue_getType(el) == MMS_FLOAT)
+                        MmsValue_setFloat(el, MmsValue_toFloat(value));
+                    else if (MmsValue_getType(el) == MMS_INTEGER)
+                        MmsValue_setInt32(el, MmsValue_toInt32(value));
+                }
+                g_overrideUntil[pi] =
+                    Hal_getTimeInMs() + (uint64_t) g_cfg.overrideHoldSeconds * 1000;
+                printf("[tase2] %s injected; holding %d s before simulation resumes\n",
+                       baseName, g_cfg.overrideHoldSeconds);
+            } else {
+                printf("[tase2] %s write accepted (no override window; sim continues)\n",
+                       baseName);
+            }
+            return DATA_ACCESS_ERROR_SUCCESS;
+        }
+    }
+
     /* Block 2 transfer-set configuration: client writes DSTransferSetNN
      * attributes to bind a data set and enable reporting. */
     if (strncmp(baseName, "DSTransferSet", 13) == 0) {
@@ -490,11 +549,21 @@ simulateValues(void)
 {
     static double t = 0.0;
     t += 1.0;
+    uint64_t now = Hal_getTimeInMs();
+
+    /* expire any injection override whose hold window has passed */
+    for (int i = 0; i < 4; i++) {
+        if (g_overrideUntil[i] && now >= g_overrideUntil[i]) {
+            g_overrideUntil[i] = 0;
+            printf("[tase2] %s override expired; simulation resumed\n", pointName(i));
+        }
+    }
+
     MmsServer_lockModel(g_server);
-    if (g_tm1) MmsValue_setFloat(MmsValue_getElement(g_tm1, 0), (float)(11.0 + 5.0 * sin(t / 5.0)));
-    if (g_tm2) MmsValue_setFloat(MmsValue_getElement(g_tm2, 0), (float)(22.0 + 3.0 * cos(t / 7.0)));
-    if (g_ts1) MmsValue_setInt32(MmsValue_getElement(g_ts1, 0), ((int)t % 2));
-    if (g_ts2) MmsValue_setInt32(MmsValue_getElement(g_ts2, 0), ((int)(t / 3) % 2));
+    if (g_tm1 && !g_overrideUntil[0]) MmsValue_setFloat(MmsValue_getElement(g_tm1, 0), (float)(11.0 + 5.0 * sin(t / 5.0)));
+    if (g_tm2 && !g_overrideUntil[1]) MmsValue_setFloat(MmsValue_getElement(g_tm2, 0), (float)(22.0 + 3.0 * cos(t / 7.0)));
+    if (g_ts1 && !g_overrideUntil[2]) MmsValue_setInt32(MmsValue_getElement(g_ts1, 0), ((int)t % 2));
+    if (g_ts2 && !g_overrideUntil[3]) MmsValue_setInt32(MmsValue_getElement(g_ts2, 0), ((int)(t / 3) % 2));
     MmsServer_unlockModel(g_server);
 }
 
@@ -534,6 +603,7 @@ parseArgs(int argc, char** argv)
     g_cfg.certFile = NULL;
     g_cfg.keyFile = NULL;
     g_cfg.caFile = NULL;
+    g_cfg.overrideHoldSeconds = 30;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-i") && i + 1 < argc) g_cfg.bindIp = argv[++i];
@@ -545,9 +615,10 @@ parseArgs(int argc, char** argv)
         else if (!strcmp(argv[i], "-C") && i + 1 < argc) g_cfg.certFile = argv[++i];
         else if (!strcmp(argv[i], "-K") && i + 1 < argc) g_cfg.keyFile = argv[++i];
         else if (!strcmp(argv[i], "-A") && i + 1 < argc) g_cfg.caFile = argv[++i];
+        else if (!strcmp(argv[i], "-o") && i + 1 < argc) g_cfg.overrideHoldSeconds = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-h")) {
             printf("usage: %s [-i bindIp] [-p port] [-d domain] [-b bltId] [-t integritySecs]\n"
-                   "          [-T] [-C serverCert.pem] [-K serverKey.pem] [-A caCert.pem]\n", argv[0]);
+                   "          [-o injectHoldSecs] [-T] [-C serverCert.pem] [-K serverKey.pem] [-A caCert.pem]\n", argv[0]);
             exit(0);
         }
     }

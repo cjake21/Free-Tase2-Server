@@ -29,7 +29,7 @@ ifneq ($(MBEDTLS),)
 LDLIBS += -lmbedtls -lmbedx509 -lmbedcrypto
 endif
 
-all: tase2_server tase2_client tase2_probe
+all: tase2_server tase2_client tase2_probe tase2_hmi_agent
 
 tase2_server: tase2_server.c $(LIBA)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBA) $(LDLIBS)
@@ -40,7 +40,11 @@ tase2_client: tase2_client.c $(LIBA)
 tase2_probe: tase2_probe.c $(LIBA)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBA) $(LDLIBS)
 
+# Persistent ICCP client that backs the SCADA HMI bridge (hmi/bridge.py).
+tase2_hmi_agent: tase2_hmi_agent.c $(LIBA)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(LIBA) $(LDLIBS)
+
 clean:
-	rm -f tase2_server tase2_client tase2_probe
+	rm -f tase2_server tase2_client tase2_probe tase2_hmi_agent
 
 .PHONY: clean

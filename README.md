@@ -71,7 +71,11 @@ free-tase2-server/
 │   ├── tase2_server.c              # the TASE.2/ICCP server
 │   ├── tase2_client.c              # C client driver (Block 1/2/5), no extra deps
 │   ├── tase2_probe.c               # small read-only client probe
+│   ├── tase2_hmi_agent.c           # persistent ICCP client that backs the SCADA HMI
 │   └── Makefile
+├── hmi/
+│   ├── bridge.py                   # stdlib HTTP/SSE bridge; drives two ICCP agents
+│   └── static/                     # the single role-aware SCADA HMI page
 ├── bindings/
 │   └── pyiec61850_tase2_wrappers.i # optional helpers for the FreeTase2 Python client
 ├── scripts/
@@ -80,7 +84,8 @@ free-tase2-server/
 │   ├── 20_netns_up.sh / 21_netns_down.sh
 │   ├── 30_run_server.sh / 31_run_client.sh
 │   ├── 32_capture.sh               # one-shot pcap capture (needs sudo)
-│   └── 40_local_test.sh            # no-sudo loopback smoke test
+│   ├── 40_local_test.sh            # no-sudo loopback smoke test
+│   └── 50_run_hmi.sh               # start the server + SCADA HMI (no sudo)
 └── docs/
     ├── proof_probe.txt             # saved tool output
     └── proof_client.txt
@@ -144,6 +149,47 @@ That starts the server on `127.0.0.1:10502`, runs the probe and the full client
 against it, and prints the whole Block 1/2/5 exchange including the reports it
 receives.
 
+## SCADA HMI
+
+The server can also be driven from a small SCADA-style HMI, so you can watch the
+TASE.2 exchange instead of only reading tool output. It is a single role-aware
+web page with two views:
+
+- **Station A** &mdash; the *local control centre* (the ICCP server side). It is
+  interactive: set the tie-line flow (MW) or bus voltage (kV), and open/close the
+  tie breaker.
+- **Station B** &mdash; the *remote control centre / Bilateral Agreement* (the
+  ICCP client side). It is read-only and shows **only** what actually arrived
+  over ICCP in Block 2 reports, plus the reporting status and a power-flow
+  threshold indicator.
+
+```bash
+./scripts/50_run_hmi.sh           # starts the server on 127.0.0.1:10502 + HMI
+# then open http://127.0.0.1:8800
+```
+
+How it works, and why it is useful for capture: the HMI does not fake anything.
+A Python bridge (`hmi/bridge.py`, stdlib only) runs two persistent ICCP clients
+(`src/tase2_hmi_agent`) against the server. Station A actions become **real MMS
+writes** to the `tm`/`ts` points (held via the server's injection-hold, `-o`) and
+Block 5 `dev1` control; Station B is fed by the server's **real Block 2
+`InformationReport` PDUs**. So a local change you make on Station A propagates to
+Station B over genuine TASE.2/MMS traffic on the wire &mdash; which is exactly
+what you can capture and inspect.
+
+To capture the HMI's traffic, run the namespace lab (`20_netns_up.sh`,
+`30_run_server.sh`, `32_capture.sh`) and point the bridge at the server
+namespace:
+
+```bash
+TASE2_HOST=10.20.0.10 TASE2_PORT=102 python3 hmi/bridge.py \
+    --server-host 10.20.0.10 --server-port 102
+```
+
+This is a **closed lab simulator**. Every value is synthetic, it controls no real
+infrastructure, and it connects to nothing outside the lab. Station A/B, the
+breaker, the tie-line flow, the voltage and all markers are training artifacts.
+
 ## Capturing a pcap
 
 These use network namespaces, so they need sudo (the scripts call it for you).
@@ -198,6 +244,7 @@ If you'd rather watch each side, use three terminals: capture in one,
 | Install everything | `./scripts/00_install_deps.sh` |
 | Build server + clients | `./scripts/10_build.sh` |
 | Confirm it works (no sudo) | `./scripts/40_local_test.sh` |
+| Run the SCADA HMI (no sudo) | `./scripts/50_run_hmi.sh` |
 | Create the capture network | `./scripts/20_netns_up.sh` |
 | Produce a pcap | `./scripts/32_capture.sh out.pcap` |
 | Run just the server | `./scripts/30_run_server.sh` |

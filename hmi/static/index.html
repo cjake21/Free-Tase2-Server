@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreeTASE2 &mdash; SCADA HMI</title>
+<link rel="stylesheet" href="/static/hmi.css">
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>FreeTASE2 <span>SCADA HMI</span></h1>
+    <div class="conn" id="conn">connecting&hellip;</div>
+  </div>
+  <div class="lab-banner">
+    SYNTHETIC TRAINING LAB &mdash; all values are simulated; this controls no real
+    infrastructure and connects to nothing outside the lab.
+  </div>
+</header>
+
+<main>
+  <!-- Station A: local control centre (interactive) -->
+  <section class="station" id="stationA">
+    <div class="station-head">
+      <h2>Station A</h2>
+      <span class="role">Local control centre &middot; ICCP server side</span>
+    </div>
+    <div class="oneline" id="oneA"></div>
+    <div class="controls">
+      <div class="ctl-row" data-item="tm1">
+        <label>Tie-line flow <span class="unit">MW</span></label>
+        <span class="mode" id="modeA-tm1">AUTO</span>
+        <input type="number" step="0.1" id="inA-tm1" placeholder="MW">
+        <button data-act="set" data-item="tm1">Set</button>
+        <button data-act="release" data-item="tm1" class="ghost">Auto</button>
+      </div>
+      <div class="ctl-row" data-item="tm2">
+        <label>Bus voltage <span class="unit">kV</span></label>
+        <span class="mode" id="modeA-tm2">AUTO</span>
+        <input type="number" step="0.1" id="inA-tm2" placeholder="kV">
+        <button data-act="set" data-item="tm2">Set</button>
+        <button data-act="release" data-item="tm2" class="ghost">Auto</button>
+      </div>
+      <div class="ctl-row breaker">
+        <label>Tie breaker <span class="unit">Block 5 control</span></label>
+        <span class="mode" id="modeA-ts1">AUTO</span>
+        <button data-act="close" class="ok">Close</button>
+        <button data-act="open" class="warn">Open</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Station B: remote control centre, fed only by ICCP reports (read-only) -->
+  <section class="station remote" id="stationB">
+    <div class="station-head">
+      <h2>Station B</h2>
+      <span class="role">Remote control centre / BA &middot; ICCP client side</span>
+    </div>
+    <div class="oneline" id="oneB"></div>
+    <div class="reporting" id="reporting">
+      <div><span>Transfer set</span><b id="rep-ts">&ndash;</b></div>
+      <div><span>Reports received</span><b id="rep-count">0</b></div>
+      <div><span>Last report</span><b id="rep-time">&ndash;</b></div>
+      <div><span>Last trigger</span><b id="rep-cond">&ndash;</b></div>
+    </div>
+    <div class="overflow-banner hidden" id="overflow">
+      &#9888; TRANSFER THRESHOLD EXCEEDED &mdash; reported tie-line flow above
+      <span id="thresh">100</span> MW
+    </div>
+  </section>
+</main>
+
+<!-- Capability 2: TASE.2 visibility / object-model inspector -->
+<details class="inspector">
+  <summary>TASE.2 / ICCP object model</summary>
+  <div class="insp-grid">
+    <div><span>TASE2_Version (VMD)</span><b id="i-version">&ndash;</b></div>
+    <div><span>Supported_Features (VMD)</span><b id="i-features">&ndash;</b></div>
+    <div><span>Bilateral_Table_ID</span><b id="i-blt">&ndash;</b></div>
+    <div><span>Next_DSTransfer_Set</span><b id="i-next">&ndash;</b></div>
+    <div><span>Data set</span><b id="i-dataset">&ndash;</b></div>
+    <div><span>Transfer set</span><b id="i-ts">&ndash;</b></div>
+    <div><span>Indication points</span><b>tm1, tm2 (RealQ) &middot; ts1, ts2 (StateQ)</b></div>
+    <div><span>Control point</span><b>dev1 (Block 5)</b></div>
+  </div>
+  <p class="insp-note">
+    Station A actions are real MMS writes to these objects; Station B values arrive
+    only via Block 2 <code>InformationReport</code> PDUs &mdash; capture TCP/102 to
+    see them on the wire.
+  </p>
+</details>
+
+<script src="/static/hmi.js"></script>
+</body>
+</html>

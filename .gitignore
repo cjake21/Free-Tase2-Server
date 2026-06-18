@@ -5,7 +5,12 @@ deps/
 src/tase2_server
 src/tase2_client
 src/tase2_probe
+src/tase2_hmi_agent
 
 # captures / scratch
 *.pcap
 *.o
+
+# python bytecode
+__pycache__/
+*.pyc

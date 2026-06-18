@@ -190,6 +190,14 @@ This is a **closed lab simulator**. Every value is synthetic, it controls no rea
 infrastructure, and it connects to nothing outside the lab. Station A/B, the
 breaker, the tie-line flow, the voltage and all markers are training artifacts.
 
+### CTF / lab branch
+
+The `scada-hmi-lab` branch adds two synthetic validation markers on top of this
+HMI for a proof-of-concept training workflow: a bilateral-table marker revealed
+in the lab/Caldera output, and a power-flow marker revealed on the HMI once the
+reported tie-line flow crosses a training threshold. See
+[`docs/lab_ctf.md`](docs/lab_ctf.md). The standard branch has no hidden markers.
+
 ## Capturing a pcap
 
 These use network namespaces, so they need sudo (the scripts call it for you).

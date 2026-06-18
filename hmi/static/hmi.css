@@ -122,6 +122,21 @@ button.warn { background: var(--warn); }
 }
 .hidden { display: none; }
 
+.marker-reveal {
+  margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+  background: linear-gradient(180deg, rgba(52,199,89,.16), rgba(52,199,89,.06));
+  border: 1px solid var(--ok);
+  animation: marker-in .5s ease-out;
+}
+.marker-title { font-weight: 700; color: var(--ok); font-size: 13px; letter-spacing: .3px; }
+.marker-sub { font-size: 11.5px; color: var(--muted); margin: 3px 0 8px; }
+.marker-flag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px;
+  font-weight: 700; color: #eafff0; background: #0e1620; border: 1px dashed var(--ok);
+  border-radius: 6px; padding: 8px 10px; word-break: break-all; user-select: all;
+}
+@keyframes marker-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
 .inspector {
   margin: 0 20px 24px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 10px; padding: 4px 16px;

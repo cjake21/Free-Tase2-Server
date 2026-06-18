@@ -19,6 +19,7 @@
  *   WRITEI <item> <int>       write an integer Value (ts1, ts2)     e.g. WRITEI ts1 0
  *   OPERATE <cmd> <tag>       Block 5 operate dev1 (Command + Tag)  e.g. OPERATE 1 hmi-open
  *   READ <item>               read a point's Value                  e.g. READ tm1
+ *   READSTR <item>            read a visible-string object          e.g. READSTR PowerFlow_Marker
  *   SNAPSHOT                  read Block 1 metadata + all points
  *   QUIT
  *
@@ -188,6 +189,23 @@ doRead(MmsConnection con, const char* item)
     if (v) MmsValue_delete(v);
 }
 
+/* Read a visible-string object (e.g. a lab marker) and emit its text. */
+static void
+doReadStr(MmsConnection con, const char* item)
+{
+    MmsValue* v = readVar(con, g_dom, item);
+    printf("{\"ev\":\"readstr\",\"item\":");
+    emitJsonString(item);
+    printf(",\"value\":");
+    if (v && MmsValue_getType(v) == MMS_VISIBLE_STRING)
+        emitJsonString(MmsValue_toString(v));
+    else
+        printf("null");
+    printf("}\n");
+    fflush(stdout);
+    if (v) MmsValue_delete(v);
+}
+
 static void
 doSnapshot(MmsConnection con)
 {
@@ -245,6 +263,9 @@ handleCommand(MmsConnection con, char* line)
     } else if (!strcmp(cmd, "READ")) {
         char* item = strtok(NULL, " \t");
         if (item) doRead(con, item);
+    } else if (!strcmp(cmd, "READSTR")) {
+        char* item = strtok(NULL, " \t");
+        if (item) doReadStr(con, item);
     } else if (!strcmp(cmd, "SNAPSHOT")) {
         doSnapshot(con);
     } else if (!strcmp(cmd, "QUIT")) {

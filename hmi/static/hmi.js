@@ -1,8 +1,9 @@
 "use strict";
 
 // Tie-line flow above this (MW) is shown as an overflow / threshold-exceeded
-// condition on the remote view. Synthetic lab threshold only.
-const THRESH_MW = 100;
+// condition on the remote view. Synthetic lab threshold; the server (lab branch)
+// reports the authoritative value in state.lab.threshold.
+let THRESH_MW = 100;
 
 let state = null;
 
@@ -85,6 +86,7 @@ function currentA(p) {
 
 function render() {
   if (!state) return;
+  if (state.lab && typeof state.lab.threshold === "number") THRESH_MW = state.lab.threshold;
 
   // connection status
   const up = state.online && state.online.A && state.online.B;
@@ -128,6 +130,13 @@ function render() {
   const over = (b.tm1 !== null && b.tm1 !== undefined && Math.abs(b.tm1) > THRESH_MW);
   document.getElementById("overflow").classList.toggle("hidden", !over);
   setText("thresh", THRESH_MW);
+
+  // lab marker 2: revealed on the HMI once the server confirms the power-flow
+  // condition (only present on the lab branch).
+  const m2 = state.lab && state.lab.marker2;
+  const revealed = !!(m2 && m2.revealed && m2.value);
+  document.getElementById("marker2").classList.toggle("hidden", !revealed);
+  if (revealed) setText("marker2-flag", m2.value);
 
   // inspector
   setText("i-version", state.meta.version || "–");

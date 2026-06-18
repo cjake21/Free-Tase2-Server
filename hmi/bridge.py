@@ -47,6 +47,13 @@ FLOAT_POINTS = {"tm1", "tm2"}
 INT_POINTS = {"ts1", "ts2"}
 ALL_POINTS = ["tm1", "tm2", "ts1", "ts2"]
 
+# Lab/CTF: the server's power-flow validation marker. The server reveals the
+# flag in this object only once the watched flow point has crossed the training
+# threshold; until then it returns a "LOCKED ..." placeholder. We poll it so the
+# HMI can reveal marker 2 the moment the power-flow condition is met.
+MARKER_FLOW = "PowerFlow_Marker"
+MARKER_POLL_SEC = 3.0
+
 
 class Agent:
     """A persistent tase2_hmi_agent subprocess with a JSON-line reader thread."""
@@ -96,10 +103,16 @@ class Agent:
 class Hmi:
     """Shared HMI state, ICCP plumbing, and SSE fan-out."""
 
-    def __init__(self, host, port, domain):
+    def __init__(self, host, port, domain, flow_threshold=100.0):
         self.server = {"host": host, "port": port, "domain": domain}
         self.lock = threading.RLock()
         self.subscribers = set()  # SSE client queues
+
+        # Lab/CTF marker 2 state, surfaced to the HMI.
+        self.lab = {
+            "threshold": flow_threshold, "flow_point": "tm1",
+            "marker2": {"object": MARKER_FLOW, "revealed": False, "value": None},
+        }
 
         self.meta = {
             "dataset": "ds_hmi", "transferset": "DSTransferSet01",
@@ -121,6 +134,7 @@ class Hmi:
         self.writer.send("SNAPSHOT")
 
         threading.Thread(target=self._heartbeat, daemon=True).start()
+        threading.Thread(target=self._poll_markers, daemon=True).start()
 
     # ---- ICCP agent events -------------------------------------------------
 
@@ -143,6 +157,13 @@ class Hmi:
                 self.stationB["report_count"] += 1
                 if self.stationB["baseline"] is None:
                     self.stationB["baseline"] = {p: ev.get(p) for p in ALL_POINTS}
+            elif kind == "readstr" and ev.get("item") == MARKER_FLOW:
+                val = ev.get("value")
+                revealed = bool(val) and not val.startswith("LOCKED")
+                self.lab["marker2"] = {
+                    "object": MARKER_FLOW, "revealed": revealed,
+                    "value": val if revealed else None,
+                }
             elif kind == "report":
                 return  # ignore the writer's echo of the broadcast report
         self._broadcast()
@@ -190,6 +211,17 @@ class Hmi:
             for item, value in manual:
                 self._write_point(item, value)
 
+    def _poll_markers(self):
+        # Read the power-flow marker until it reveals; then stop polling (it
+        # latches server-side, so one confirmed read is enough).
+        while True:
+            with self.lock:
+                done = self.lab["marker2"]["revealed"]
+            if done:
+                return
+            self.writer.send("READSTR " + MARKER_FLOW)
+            time.sleep(MARKER_POLL_SEC)
+
     # ---- state + SSE -------------------------------------------------------
 
     def snapshot(self):
@@ -198,6 +230,7 @@ class Hmi:
                 "server": self.server, "online": dict(self.online),
                 "meta": dict(self.meta), "points": json.loads(json.dumps(self.points)),
                 "stationB": json.loads(json.dumps(self.stationB)),
+                "lab": json.loads(json.dumps(self.lab)),
             }
 
     def subscribe(self):
@@ -321,12 +354,16 @@ def main():
     ap.add_argument("--domain", default=os.environ.get("TASE2_DOMAIN", "TestDomain"))
     ap.add_argument("--http-host", default="127.0.0.1")
     ap.add_argument("--http-port", type=int, default=8800)
+    ap.add_argument("--flow-threshold", type=float,
+                    default=float(os.environ.get("TASE2_FLOW_THRESHOLD", "100")),
+                    help="power-flow threshold (MW) for the HMI marker-2 reveal; "
+                         "match the server's --flow-threshold")
     args = ap.parse_args()
 
     if not os.path.isfile(AGENT_BIN):
         sys.exit("[hmi] build first: (cd src && make tase2_hmi_agent)")
 
-    Handler.hmi = Hmi(args.server_host, args.server_port, args.domain)
+    Handler.hmi = Hmi(args.server_host, args.server_port, args.domain, args.flow_threshold)
     httpd = ThreadingHTTPServer((args.http_host, args.http_port), Handler)
     print("[hmi] SCADA HMI on http://%s:%d  (TASE.2 server %s:%d, domain %s)" % (
         args.http_host, args.http_port, args.server_host, args.server_port, args.domain))

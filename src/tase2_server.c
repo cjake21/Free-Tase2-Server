@@ -86,7 +86,26 @@ typedef struct {
     int         overrideHoldSeconds;/* -o : hold a written tm/ts value this long
                                      *      before simulation resumes (0 = never
                                      *      override; simulation always wins) */
+    /* CTF / lab-branch validation markers (synthetic training artifacts). */
+    const char* flag1;              /* --flag1 : Bilateral_Marker, gated on a
+                                     *           Bilateral_Table_ID read */
+    const char* flag2;              /* --flag2 : PowerFlow_Marker, gated on the
+                                     *           flow point crossing the threshold */
+    double      flowThreshold;      /* --flow-threshold : MW threshold for marker 2 */
+    const char* flowPoint;          /* --flow-point : which point to watch (tm1) */
 } Tase2Config;
+
+/* Lab markers: object names, locked placeholders, and gate state. The marker
+ * objects are modeled but intentionally left out of the value cache, so reads
+ * fall through to the read handler, which reveals the flag only once the
+ * corresponding training milestone has been reached. */
+#define MARKER_BLT_NAME    "Bilateral_Marker"
+#define MARKER_FLOW_NAME   "PowerFlow_Marker"
+#define MARKER_BLT_LOCKED  "LOCKED - enumerate the bilateral table object list first"
+#define MARKER_FLOW_LOCKED "LOCKED - tie-line flow within limits"
+
+static volatile int g_bltConfirmed = 0;  /* a client has read Bilateral_Table_ID */
+static volatile int g_flowExceeded = 0;   /* flow point has crossed the threshold (latched) */
 
 /* Server state */
 
@@ -298,6 +317,12 @@ buildModel(void)
     dev->typeSpec.structure.elements[2] = specLeaf("Status", MMS_INTEGER, 8);
     d[idx++] = dev;
 
+    /* CTF / lab validation markers: modeled (so they show up in the object list
+     * and introspection) but deliberately NOT cached, so reads route to the read
+     * handler that gates the flag reveal. */
+    d[idx++] = specLeaf(MARKER_BLT_NAME, MMS_VISIBLE_STRING, 160);
+    d[idx++] = specLeaf(MARKER_FLOW_NAME, MMS_VISIBLE_STRING, 160);
+
     MmsVariableSpecification** domainVars =
         (MmsVariableSpecification**) calloc(idx, sizeof(MmsVariableSpecification*));
     memcpy(domainVars, d, idx * sizeof(MmsVariableSpecification*));
@@ -503,6 +528,68 @@ writeHandler(void* parameter, MmsDomain* domain, const char* variableId,
     return DATA_ACCESS_ERROR_SUCCESS; /* accept other writes */
 }
 
+/* List-access handler: invoked when a client enumerates the domain's object
+ * names. That enumeration is the "Enumerate Bilateral Table and Objects" recon
+ * milestone, so it unlocks marker 1. We latch on it (rather than on a
+ * Bilateral_Table_ID read) because the HMI's own clients never list names, so
+ * the gate reflects the learner's workflow rather than the monitoring HMI. It
+ * never denies access. */
+static bool
+listAccessHandler(void* parameter, MmsGetNameListType listType, MmsDomain* domain,
+                  char* variableId, MmsServerConnection connection)
+{
+    if (!g_bltConfirmed) {
+        g_bltConfirmed = 1;
+        printf("[tase2][lab] bilateral-table object list enumerated - marker 1 unlocked\n");
+    }
+    return true;
+}
+
+/* Read handler: only called for variables with no cached value, i.e. our two
+ * uncached marker objects. It returns the flag once the matching milestone is
+ * reached, otherwise a LOCKED placeholder. The returned value is freshly
+ * allocated and marked deletable so the read service frees it. */
+static MmsValue*
+readHandler(void* parameter, MmsDomain* domain, char* variableId,
+            MmsServerConnection connection, bool isDirectAccess)
+{
+    const char* s = NULL;
+    if (variableId && strcmp(variableId, MARKER_BLT_NAME) == 0)
+        s = g_bltConfirmed ? g_cfg.flag1 : MARKER_BLT_LOCKED;
+    else if (variableId && strcmp(variableId, MARKER_FLOW_NAME) == 0)
+        s = g_flowExceeded ? g_cfg.flag2 : MARKER_FLOW_LOCKED;
+
+    if (s == NULL)
+        return NULL; /* unknown/uncached variable: let the stack report it */
+
+    MmsValue* v = MmsValue_newVisibleString(s);
+    MmsValue_setDeletable(v);
+    return v;
+}
+
+/* Latch the power-flow marker once the watched flow point crosses the training
+ * threshold. Once exceeded it stays unlocked (the milestone has been proven). */
+static void
+checkFlowThreshold(void)
+{
+    if (g_flowExceeded)
+        return;
+    int pi = pointIndex(g_cfg.flowPoint);
+    MmsValue* cell = pointCell(pi);
+    if (!cell)
+        return;
+    MmsValue* el = MmsValue_getElement(cell, 0);
+    if (!el)
+        return;
+    double val = (MmsValue_getType(el) == MMS_FLOAT)
+                 ? MmsValue_toFloat(el) : (double) MmsValue_toInt32(el);
+    if (fabs(val) > g_cfg.flowThreshold) {
+        g_flowExceeded = 1;
+        printf("[tase2][lab] %s=%.3f crossed threshold %.1f - power-flow marker (2) unlocked\n",
+               g_cfg.flowPoint, val, g_cfg.flowThreshold);
+    }
+}
+
 /* reporting: send an unconfirmed InformationReport for each enabled transfer set */
 
 static void
@@ -604,6 +691,10 @@ parseArgs(int argc, char** argv)
     g_cfg.keyFile = NULL;
     g_cfg.caFile = NULL;
     g_cfg.overrideHoldSeconds = 30;
+    g_cfg.flag1 = "flag{tase2_bilateral_table_recon}";
+    g_cfg.flag2 = "flag{tase2_powerflow_overflow}";
+    g_cfg.flowThreshold = 100.0;
+    g_cfg.flowPoint = "tm1";
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-i") && i + 1 < argc) g_cfg.bindIp = argv[++i];
@@ -616,9 +707,14 @@ parseArgs(int argc, char** argv)
         else if (!strcmp(argv[i], "-K") && i + 1 < argc) g_cfg.keyFile = argv[++i];
         else if (!strcmp(argv[i], "-A") && i + 1 < argc) g_cfg.caFile = argv[++i];
         else if (!strcmp(argv[i], "-o") && i + 1 < argc) g_cfg.overrideHoldSeconds = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--flag1") && i + 1 < argc) g_cfg.flag1 = argv[++i];
+        else if (!strcmp(argv[i], "--flag2") && i + 1 < argc) g_cfg.flag2 = argv[++i];
+        else if (!strcmp(argv[i], "--flow-threshold") && i + 1 < argc) g_cfg.flowThreshold = atof(argv[++i]);
+        else if (!strcmp(argv[i], "--flow-point") && i + 1 < argc) g_cfg.flowPoint = argv[++i];
         else if (!strcmp(argv[i], "-h")) {
             printf("usage: %s [-i bindIp] [-p port] [-d domain] [-b bltId] [-t integritySecs]\n"
-                   "          [-o injectHoldSecs] [-T] [-C serverCert.pem] [-K serverKey.pem] [-A caCert.pem]\n", argv[0]);
+                   "          [-o injectHoldSecs] [-T] [-C serverCert.pem] [-K serverKey.pem] [-A caCert.pem]\n"
+                   "          [--flag1 STR] [--flag2 STR] [--flow-threshold MW] [--flow-point tm1]\n", argv[0]);
             exit(0);
         }
     }
@@ -655,6 +751,8 @@ main(int argc, char** argv)
     MmsServer_setMaxDataSetEntries(g_server, 64);
     MmsServer_setServerIdentity(g_server, "FreeTASE2", "tase2-server-sim", "0.1");
     MmsServer_installWriteHandler(g_server, writeHandler, NULL);
+    MmsServer_installListAccessHandler(g_server, listAccessHandler, NULL);
+    MmsServer_installReadHandler(g_server, readHandler, NULL);
     MmsServer_installConnectionHandler(g_server, connectionHandler, NULL);
 
     populateCache();
@@ -666,6 +764,9 @@ main(int argc, char** argv)
            g_cfg.domainName, g_cfg.bltId, g_cfg.port);
     printf("[tase2] VMD: TASE2_Version=%d-%d, Supported_Features=Block1,2,5\n",
            TASE2_VERSION_MAJOR, TASE2_VERSION_MINOR);
+    printf("[tase2][lab] CTF markers active: %s (gated on object-list enum), %s"
+           " (gated on %s > %.1f)\n",
+           MARKER_BLT_NAME, MARKER_FLOW_NAME, g_cfg.flowPoint, g_cfg.flowThreshold);
 
     /* libIEC61850 here is built single-threaded (CONFIG_MMS_SINGLE_THREADED=1),
      * so we drive the MMS stack and our periodic work from one loop. */
@@ -682,6 +783,7 @@ main(int argc, char** argv)
         if (now - lastTick >= 1000) {
             lastTick = now;
             simulateValues();
+            checkFlowThreshold();
             tick++;
             int integrityDue = (tick % g_cfg.integritySeconds) == 0;
             reportingTick(integrityDue);

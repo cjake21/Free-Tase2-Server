@@ -3,91 +3,127 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FreeTASE2 &mdash; SCADA HMI</title>
+<title>FreeTASE2 Power System HMI</title>
 <link rel="stylesheet" href="/static/hmi.css">
 </head>
 <body>
 <header>
-  <div class="title">
-    <h1>FreeTASE2 <span>SCADA HMI</span></h1>
-    <div class="conn" id="conn">connecting&hellip;</div>
+  <div class="brand">
+    <div class="logo" aria-hidden="true"></div>
+    <div>
+      <h1>FreeTASE2 Power System HMI</h1>
+      <p class="tagline">A simulated control-room screen (HMI) for two connected power stations.</p>
+    </div>
   </div>
-  <div class="lab-banner">
-    SYNTHETIC TRAINING LAB &mdash; all values are simulated; this controls no real
-    infrastructure and connects to nothing outside the lab.
-  </div>
+  <div class="link-pill" id="conn">connecting...</div>
 </header>
 
+<div class="safety">
+  Training simulation only. Every reading is made up. Nothing on this screen
+  controls real equipment, and it connects to nothing outside the lab.
+</div>
+
+<!-- Plain-language legend so a first-time viewer can read the diagram -->
+<section class="legend">
+  <span class="legend-title">How to read this screen:</span>
+  <span class="leg"><i class="sw gen"></i> Generator (makes the power)</span>
+  <span class="leg"><i class="sw bus"></i> Busbar (the station's main junction)</span>
+  <span class="leg"><i class="sw brk-c"></i> Breaker closed (line connected)</span>
+  <span class="leg"><i class="sw brk-o"></i> Breaker open (line cut)</span>
+  <span class="leg"><i class="sw flow"></i> Tie line, moving dashes show power flowing</span>
+  <span class="leg"><i class="sw live"></i> Green = energized</span>
+  <span class="leg"><i class="sw chg"></i> Blue = changed from normal</span>
+  <span class="leg"><i class="sw over"></i> Red = above the safe limit</span>
+</section>
+
 <main>
-  <!-- Station A: local control centre (interactive) -->
+  <!-- Station A: the local control room (interactive) -->
   <section class="station" id="stationA">
     <div class="station-head">
       <h2>Station A</h2>
-      <span class="role">Local control centre &middot; ICCP server side</span>
+      <span class="role">Local control room. You operate this station.</span>
     </div>
     <div class="oneline" id="oneA"></div>
+    <p class="diagram-cap">What this station is actually sending out.</p>
+
     <div class="controls">
+      <p class="controls-help">
+        Change a reading and watch it travel to Station B. "Auto" means the value
+        follows the simulation. "Manual" means you have set it by hand.
+      </p>
       <div class="ctl-row" data-item="tm1">
-        <label>Tie-line flow <span class="unit">MW</span></label>
+        <div class="ctl-label">
+          <span>Tie-line power flow</span>
+          <small>how much power is sent to the neighbor (MW)</small>
+        </div>
         <span class="mode" id="modeA-tm1">AUTO</span>
         <input type="number" step="0.1" id="inA-tm1" placeholder="MW">
         <button data-act="set" data-item="tm1">Set</button>
-        <button data-act="release" data-item="tm1" class="ghost">Auto</button>
+        <button data-act="release" data-item="tm1" class="ghost">Back to auto</button>
       </div>
       <div class="ctl-row" data-item="tm2">
-        <label>Bus voltage <span class="unit">kV</span></label>
+        <div class="ctl-label">
+          <span>Bus voltage</span>
+          <small>the electrical "pressure" at the busbar (kV)</small>
+        </div>
         <span class="mode" id="modeA-tm2">AUTO</span>
         <input type="number" step="0.1" id="inA-tm2" placeholder="kV">
         <button data-act="set" data-item="tm2">Set</button>
-        <button data-act="release" data-item="tm2" class="ghost">Auto</button>
+        <button data-act="release" data-item="tm2" class="ghost">Back to auto</button>
       </div>
       <div class="ctl-row breaker">
-        <label>Tie breaker <span class="unit">Block 5 control</span></label>
+        <div class="ctl-label">
+          <span>Tie-line breaker</span>
+          <small>the switch connecting this station to the neighbor</small>
+        </div>
         <span class="mode" id="modeA-ts1">AUTO</span>
-        <button data-act="close" class="ok">Close</button>
-        <button data-act="open" class="warn">Open</button>
+        <button data-act="close" class="ok">Close (connect)</button>
+        <button data-act="open" class="warn">Open (cut)</button>
       </div>
     </div>
   </section>
 
-  <!-- Station B: remote control centre, fed only by ICCP reports (read-only) -->
+  <!-- Station B: the neighboring control room, read-only -->
   <section class="station remote" id="stationB">
     <div class="station-head">
       <h2>Station B</h2>
-      <span class="role">Remote control centre / BA &middot; ICCP client side</span>
+      <span class="role">Neighboring control room. It only sees what Station A sends.</span>
     </div>
     <div class="oneline" id="oneB"></div>
-    <div class="reporting" id="reporting">
-      <div><span>Transfer set</span><b id="rep-ts">&ndash;</b></div>
-      <div><span>Reports received</span><b id="rep-count">0</b></div>
-      <div><span>Last report</span><b id="rep-time">&ndash;</b></div>
-      <div><span>Last trigger</span><b id="rep-cond">&ndash;</b></div>
+    <p class="diagram-cap">What the neighbor receives over the data link.</p>
+
+    <div class="feed">
+      <div class="feed-row"><span>Data link</span><b id="rep-link">checking...</b></div>
+      <div class="feed-row"><span>Updates received</span><b id="rep-count">0</b></div>
+      <div class="feed-row"><span>Last update</span><b id="rep-time">none yet</b></div>
+      <div class="feed-row"><span>Reason for last update</span><b id="rep-cond">--</b></div>
     </div>
-    <div class="overflow-banner hidden" id="overflow">
-      &#9888; TRANSFER THRESHOLD EXCEEDED &mdash; reported tie-line flow above
-      <span id="thresh">100</span> MW
+    <div class="warn-banner hidden" id="overflow">
+      Warning: the reported tie-line power flow is above the safe limit of
+      <span id="thresh">100</span> MW.
     </div>
   </section>
 </main>
 
-<!-- Capability 2: TASE.2 visibility / object-model inspector -->
+<!-- Optional detail for the curious: the data link under the diagram -->
 <details class="inspector">
-  <summary>TASE.2 / ICCP object model</summary>
-  <div class="insp-grid">
-    <div><span>TASE2_Version (VMD)</span><b id="i-version">&ndash;</b></div>
-    <div><span>Supported_Features (VMD)</span><b id="i-features">&ndash;</b></div>
-    <div><span>Bilateral_Table_ID</span><b id="i-blt">&ndash;</b></div>
-    <div><span>Next_DSTransfer_Set</span><b id="i-next">&ndash;</b></div>
-    <div><span>Data set</span><b id="i-dataset">&ndash;</b></div>
-    <div><span>Transfer set</span><b id="i-ts">&ndash;</b></div>
-    <div><span>Indication points</span><b>tm1, tm2 (RealQ) &middot; ts1, ts2 (StateQ)</b></div>
-    <div><span>Control point</span><b>dev1 (Block 5)</b></div>
-  </div>
+  <summary>Behind the scenes: the data link between the stations</summary>
   <p class="insp-note">
-    Station A actions are real MMS writes to these objects; Station B values arrive
-    only via Block 2 <code>InformationReport</code> PDUs &mdash; capture TCP/102 to
-    see them on the wire.
+    The two stations talk over an industrial protocol called TASE.2 (also known as
+    ICCP). When you change something in Station A, the HMI makes a real protocol
+    write, and Station B only updates from the messages that genuinely arrive. The
+    values below are the named objects the stations exchange.
   </p>
+  <div class="insp-grid">
+    <div><span>Protocol version</span><b id="i-version">--</b></div>
+    <div><span>Supported features</span><b id="i-features">--</b></div>
+    <div><span>Agreement id (who may talk)</span><b id="i-blt">--</b></div>
+    <div><span>Next transfer set</span><b id="i-next">--</b></div>
+    <div><span>Data set (group of points sent)</span><b id="i-dataset">--</b></div>
+    <div><span>Transfer set (the reporting rule)</span><b id="i-ts">--</b></div>
+    <div><span>Analog points</span><b>tm1 = power flow, tm2 = voltage</b></div>
+    <div><span>Status points</span><b>ts1 = breaker, ts2 = remote status</b></div>
+  </div>
 </details>
 
 <script src="/static/hmi.js"></script>

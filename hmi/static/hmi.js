@@ -115,11 +115,11 @@ function render() {
   if (!state) return;
   if (state.lab && typeof state.lab.threshold === "number") THRESH_MW = state.lab.threshold;
 
-  // data-link status, in plain words
+  // data-link status, shown as a compact system-status label
   const up = state.online && state.online.A && state.online.B;
   const conn = document.getElementById("conn");
-  conn.textContent = up ? "Linked to Station B" : "Data link down";
-  conn.className = "link-pill " + (up ? "up" : "down");
+  conn.textContent = up ? "COMMS ONLINE" : "COMMS OFFLINE";
+  conn.className = "sysstat " + (up ? "up" : "down");
 
   // Station A (what the operator is sending)
   renderStation("A", {
@@ -220,7 +220,7 @@ function init() {
   es.onmessage = ev => { try { state = JSON.parse(ev.data); render(); } catch (e) {} };
   es.onerror = () => {
     const conn = document.getElementById("conn");
-    conn.textContent = "reconnecting..."; conn.className = "link-pill down";
+    conn.textContent = "COMMS OFFLINE"; conn.className = "sysstat down";
   };
 }
 

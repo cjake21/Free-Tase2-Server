@@ -3,129 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FreeTASE2 Power System HMI</title>
+<title>FreeTASE2 Intertie HMI</title>
 <link rel="stylesheet" href="/static/hmi.css">
 </head>
 <body>
-<header>
-  <div class="brand">
-    <div class="logo" aria-hidden="true"></div>
-    <div>
-      <h1>FreeTASE2 Power System HMI</h1>
-      <p class="tagline">A simulated control-room screen (HMI) for two connected power stations.</p>
-    </div>
+
+<!-- 1. system header bar -->
+<header class="sysbar">
+  <div class="sysid">
+    <span class="sysname">FREETASE2 // ICCP INTERTIE</span>
+    <span class="syssub" id="sys-sub">DOMAIN -- &nbsp;|&nbsp; BLT -- &nbsp;|&nbsp; SES --</span>
   </div>
-  <div class="sysstat" id="conn">COMMS OFFLINE</div>
+  <div class="sysstatus">
+    <div class="st"><span class="k">LINK STATE</span><span class="v" id="st-link">OFFLINE</span></div>
+    <div class="st"><span class="k">SCAN</span><span class="v" id="st-scan">HOLD</span></div>
+    <div class="st"><span class="k">REMOTE EXCH</span><span class="v" id="st-rem">OFFLINE</span></div>
+    <div class="st"><span class="k">LAST UPDATE</span><span class="v" id="st-upd">--:--:--Z</span></div>
+    <div class="st"><span class="k">UTC</span><span class="v" id="st-clock">--:--:--Z</span></div>
+    <div class="st"><span class="k">ALARMS</span><span class="v" id="st-alm">0</span></div>
+  </div>
 </header>
 
-<!-- Plain-language legend so a first-time viewer can read the diagram -->
-<section class="legend">
-  <span class="legend-title">How to read this screen:</span>
-  <span class="leg"><i class="sw gen"></i> Generator (makes the power)</span>
-  <span class="leg"><i class="sw bus"></i> Busbar (the station's main junction)</span>
-  <span class="leg"><i class="sw brk-c"></i> Breaker closed (line connected)</span>
-  <span class="leg"><i class="sw brk-o"></i> Breaker open (line cut)</span>
-  <span class="leg"><i class="sw flow"></i> Tie line, moving dashes show power flowing</span>
-  <span class="leg"><i class="sw live"></i> Green = energized</span>
-  <span class="leg"><i class="sw chg"></i> Blue = changed from normal</span>
-  <span class="leg"><i class="sw over"></i> Red = above the safe limit</span>
+<!-- 2. alarm / status strip -->
+<section class="alarmstrip">
+  <div class="bar-head">
+    <span>ALARM SUMMARY</span>
+    <button class="op" id="ackbtn">ACKNOWLEDGE</button>
+  </div>
+  <div class="alarm-rows" id="alarm-rows"></div>
 </section>
 
-<main>
-  <!-- Station A: the local control room (interactive) -->
-  <section class="station" id="stationA">
-    <div class="station-head">
-      <h2>Station A</h2>
-      <span class="role">Local control room. You operate this station.</span>
-    </div>
-    <div class="oneline" id="oneA"></div>
-    <p class="diagram-cap">What this station is actually sending out.</p>
+<!-- 3. main one-line mimic (hero) -->
+<section class="mimic">
+  <div class="bar-head"><span>SYSTEM ONE-LINE / TIE-LINE INTERCHANGE</span></div>
+  <div class="mimic-body" id="mimic-svg"></div>
+</section>
 
-    <div class="controls">
-      <p class="controls-help">
-        Change a reading and watch it travel to Station B. "Auto" means the value
-        follows the simulation. "Manual" means you have set it by hand.
-      </p>
-      <div class="ctl-row" data-item="tm1">
-        <div class="ctl-label">
-          <span>Tie-line power flow</span>
-          <small>how much power is sent to the neighbor (MW)</small>
+<div class="panes">
+  <!-- 4. local station controls -->
+  <section class="pane">
+    <div class="bar-head"><span>LOCAL STATION A / SOURCE</span><span class="badge" id="local-mode">AUTO</span></div>
+    <div class="cells">
+
+      <div class="cell" data-item="tm1">
+        <div class="cell-tag">TM1 <span>TIE-LINE FLOW</span></div>
+        <div class="cell-grid">
+          <div><span class="k">MODE</span><span class="v" id="c-tm1-mode">AUTO</span></div>
+          <div><span class="k">SOURCE</span><span class="v">LOCAL</span></div>
+          <div><span class="k">FEEDBACK</span><span class="v" id="c-tm1-fb">-- MW</span></div>
+          <div><span class="k">LAST RCVD</span><span class="v" id="c-tm1-rcv">-- MW</span></div>
         </div>
-        <span class="mode" id="modeA-tm1">AUTO</span>
-        <input type="number" step="0.1" id="inA-tm1" placeholder="MW">
-        <button data-act="set" data-item="tm1">Set</button>
-        <button data-act="release" data-item="tm1" class="ghost">Back to auto</button>
-      </div>
-      <div class="ctl-row" data-item="tm2">
-        <div class="ctl-label">
-          <span>Bus voltage</span>
-          <small>the electrical "pressure" at the busbar (kV)</small>
+        <div class="cell-cmd">
+          <input type="number" step="0.1" id="in-tm1" placeholder="SETPOINT  MW">
+          <button class="op act" data-act="set" data-item="tm1">SET VALUE</button>
+          <button class="op" data-act="release" data-item="tm1">RETURN AUTO</button>
         </div>
-        <span class="mode" id="modeA-tm2">AUTO</span>
-        <input type="number" step="0.1" id="inA-tm2" placeholder="kV">
-        <button data-act="set" data-item="tm2">Set</button>
-        <button data-act="release" data-item="tm2" class="ghost">Back to auto</button>
       </div>
-      <div class="ctl-row breaker">
-        <div class="ctl-label">
-          <span>Tie-line breaker</span>
-          <small>the switch connecting this station to the neighbor</small>
+
+      <div class="cell" data-item="tm2">
+        <div class="cell-tag">TM2 <span>BUS VOLTAGE</span></div>
+        <div class="cell-grid">
+          <div><span class="k">MODE</span><span class="v" id="c-tm2-mode">AUTO</span></div>
+          <div><span class="k">SOURCE</span><span class="v">LOCAL</span></div>
+          <div><span class="k">FEEDBACK</span><span class="v" id="c-tm2-fb">-- kV</span></div>
+          <div><span class="k">LAST RCVD</span><span class="v" id="c-tm2-rcv">-- kV</span></div>
         </div>
-        <span class="mode" id="modeA-ts1">AUTO</span>
-        <button data-act="close" class="ok">Close (connect)</button>
-        <button data-act="open" class="warn">Open (cut)</button>
+        <div class="cell-cmd">
+          <input type="number" step="0.1" id="in-tm2" placeholder="SETPOINT  kV">
+          <button class="op act" data-act="set" data-item="tm2">SET VALUE</button>
+          <button class="op" data-act="release" data-item="tm2">RETURN AUTO</button>
+        </div>
       </div>
+
+      <div class="cell" data-item="ts1">
+        <div class="cell-tag">DEV1 <span>TIE BREAKER</span></div>
+        <div class="cell-grid">
+          <div><span class="k">MODE</span><span class="v" id="c-ts1-mode">AUTO</span></div>
+          <div><span class="k">STATE</span><span class="v" id="c-ts1-state">--</span></div>
+          <div><span class="k">FEEDBACK</span><span class="v" id="c-ts1-fb">--</span></div>
+          <div><span class="k">INTERLOCK</span><span class="v">NONE</span></div>
+        </div>
+        <div class="cell-cmd">
+          <button class="op grn" data-act="close">CLOSE BRKR</button>
+          <button class="op red" data-act="open">OPEN BRKR</button>
+        </div>
+      </div>
+
     </div>
   </section>
 
-  <!-- Station B: the neighboring control room, read-only -->
-  <section class="station remote" id="stationB">
-    <div class="station-head">
-      <h2>Station B</h2>
-      <span class="role">Neighboring control room. It only sees what Station A sends.</span>
-    </div>
-    <div class="oneline" id="oneB"></div>
-    <p class="diagram-cap">What the neighbor receives over the data link.</p>
-
-    <div class="feed">
-      <div class="feed-row"><span>Data link</span><b id="rep-link">checking...</b></div>
-      <div class="feed-row"><span>Updates received</span><b id="rep-count">0</b></div>
-      <div class="feed-row"><span>Last update</span><b id="rep-time">none yet</b></div>
-      <div class="feed-row"><span>Reason for last update</span><b id="rep-cond">--</b></div>
-    </div>
-    <div class="warn-banner hidden" id="overflow">
-      Warning: the reported tie-line power flow is above the safe limit of
-      <span id="thresh">100</span> MW.
+  <!-- 5. remote station received-state panel -->
+  <section class="pane">
+    <div class="bar-head"><span>REMOTE STATION B / RECEIVED</span><span class="badge cyan" id="remote-link">OFFLINE</span></div>
+    <div class="rcv-grid">
+      <div><span class="k">RECEIVED FLOW</span><span class="v cyan" id="r-flow">-- MW</span></div>
+      <div><span class="k">RECEIVED VOLTS</span><span class="v cyan" id="r-volt">-- kV</span></div>
+      <div><span class="k">BREAKER</span><span class="v" id="r-brk">--</span></div>
+      <div><span class="k">REPORT STATE</span><span class="v" id="r-rptstate">IDLE</span></div>
+      <div><span class="k">LAST REPORT</span><span class="v" id="r-last">--</span></div>
+      <div><span class="k">REPORT COUNT</span><span class="v" id="r-count">0</span></div>
+      <div><span class="k">REASON</span><span class="v" id="r-reason">--</span></div>
+      <div><span class="k">QUALITY</span><span class="v" id="r-qual">--</span></div>
+      <div><span class="k">LINK STATE</span><span class="v" id="r-link">OFFLINE</span></div>
+      <div><span class="k">DISCREPANCY</span><span class="v" id="r-disc">--</span></div>
     </div>
     <div class="marker-reveal hidden" id="marker2">
-      <div class="marker-title">Validation marker reached</div>
-      <div class="marker-sub">
-        The reported power flow crossed the training limit. The flow state on this
-        screen has changed, which confirms the manipulation worked.
-      </div>
+      <div class="marker-head"><span>VALIDATION MARKER</span><span>POWER-FLOW LIMIT EXCEEDED</span></div>
       <div class="marker-flag" id="marker2-flag">--</div>
     </div>
   </section>
-</main>
+</div>
 
-<!-- Optional detail for the curious: the data link under the diagram -->
-<details class="inspector">
-  <summary>Behind the scenes: the data link between the stations</summary>
-  <p class="insp-note">
-    The two stations talk over an industrial protocol called TASE.2 (also known as
-    ICCP). When you change something in Station A, the HMI makes a real protocol
-    write, and Station B only updates from the messages that genuinely arrive. The
-    values below are the named objects the stations exchange.
+<!-- 6. event / report strip -->
+<section class="events">
+  <div class="bar-head"><span>EVENT LOG</span></div>
+  <div class="event-rows" id="event-rows"></div>
+</section>
+
+<!-- 7. collapsible reference / system notes -->
+<details class="reference">
+  <summary>REFERENCE / SYSTEM NOTES</summary>
+  <p class="ref-note">
+    Local station values are operator-set or simulated and represent local truth.
+    Remote values are what the neighboring station receives over TASE.2 / ICCP
+    Block 2 reports. Object model exchanged:
   </p>
-  <div class="insp-grid">
-    <div><span>Protocol version</span><b id="i-version">--</b></div>
-    <div><span>Supported features</span><b id="i-features">--</b></div>
-    <div><span>Agreement id (who may talk)</span><b id="i-blt">--</b></div>
-    <div><span>Next transfer set</span><b id="i-next">--</b></div>
-    <div><span>Data set (group of points sent)</span><b id="i-dataset">--</b></div>
-    <div><span>Transfer set (the reporting rule)</span><b id="i-ts">--</b></div>
-    <div><span>Analog points</span><b>tm1 = power flow, tm2 = voltage</b></div>
-    <div><span>Status points</span><b>ts1 = breaker, ts2 = remote status</b></div>
+  <div class="ref-grid">
+    <div><span class="k">PROTOCOL VERSION</span><span class="v" id="i-version">--</span></div>
+    <div><span class="k">SUPPORTED FEATURES</span><span class="v" id="i-features">--</span></div>
+    <div><span class="k">BILATERAL TABLE ID</span><span class="v" id="i-blt">--</span></div>
+    <div><span class="k">NEXT TRANSFER SET</span><span class="v" id="i-next">--</span></div>
+    <div><span class="k">DATA SET</span><span class="v" id="i-dataset">--</span></div>
+    <div><span class="k">TRANSFER SET</span><span class="v" id="i-ts">--</span></div>
+    <div><span class="k">ANALOG POINTS</span><span class="v">TM1 FLOW / TM2 VOLTS</span></div>
+    <div><span class="k">STATUS POINTS</span><span class="v">TS1 BRKR / TS2 REMOTE</span></div>
   </div>
 </details>
 

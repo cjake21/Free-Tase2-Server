@@ -1,84 +1,111 @@
 "use strict";
 
-// Tie-line flow above this (MW) is shown as an overflow / threshold-exceeded
-// condition on the remote view. Synthetic lab threshold; the server (lab branch)
-// reports the authoritative value in state.lab.threshold.
+// Tie-line power flow above this (MW) is shown as an over-the-limit condition on
+// the remote view. Synthetic training threshold only.
 let THRESH_MW = 100;
 
 let state = null;
 
-// ---- one-line diagram -----------------------------------------------------
+// ---- single-line diagram --------------------------------------------------
 
+// Build the station one-line diagram. p is the station prefix ("A" or "B");
+// element ids are suffixed with it so render() can update each piece.
 function buildSvg(p) {
-  // p is the station prefix ("A" or "B"). IDs are suffixed with it.
   return `
-  <svg viewBox="0 0 360 175" role="img" aria-label="single line diagram">
+  <svg viewBox="0 0 460 200" role="img" aria-label="single line diagram">
     <!-- generator -->
-    <circle class="gen" cx="38" cy="92" r="17"></circle>
-    <text class="gen-label" x="38" y="97">G</text>
-    <line class="wire" id="gw-${p}" x1="55" y1="92" x2="92" y2="92"></line>
-    <!-- local bus -->
-    <line class="bus" id="bus-${p}" x1="92" y1="52" x2="92" y2="132"></line>
-    <text class="lbl" x="92" y="46" text-anchor="middle">BUS</text>
-    <text class="val" id="volt-${p}" x="120" y="46" text-anchor="start">– kV</text>
-    <!-- breaker on the tie -->
-    <line class="wire" id="tw1-${p}" x1="92" y1="92" x2="146" y2="92"></line>
-    <rect class="brk-box closed" id="brk-${p}" x="146" y="84" width="16" height="16" rx="2"></rect>
-    <text class="tag" id="brklbl-${p}" x="154" y="118">CLOSED</text>
-    <!-- tie line to remote bus -->
-    <line class="wire" id="tw2-${p}" x1="162" y1="92" x2="300" y2="92"></line>
-    <polygon class="flow-arrow" id="arr-${p}" points="224,86 240,92 224,98"></polygon>
-    <text class="val" id="flow-${p}" x="231" y="78" text-anchor="middle">– MW</text>
-    <text class="lbl" x="231" y="112" text-anchor="middle">TIE LINE</text>
-    <!-- remote bus -->
-    <line class="bus" id="rbus-${p}" x1="300" y1="52" x2="300" y2="132"></line>
-    <circle id="rstat-${p}" cx="320" cy="92" r="6" fill="#4a5763"></circle>
-    <text class="lbl" x="300" y="46" text-anchor="middle">${p === "A" ? "TIE" : "LOCAL"}</text>
+    <circle class="gen-ring" cx="44" cy="90" r="20"></circle>
+    <path class="gen-wave" d="M34 90 q5 -9 10 0 q5 9 10 0"></path>
+    <text class="cap" x="44" y="126" text-anchor="middle">Generator</text>
+
+    <!-- generator to local bus (always energized: the generator feeds the bus) -->
+    <line class="wire live" x1="64" y1="90" x2="120" y2="90"></line>
+
+    <!-- local busbar (BUS A) -->
+    <line class="bus live" id="busL-${p}" x1="120" y1="50" x2="120" y2="130"></line>
+    <text class="busname" x="120" y="42" text-anchor="middle">BUS A</text>
+    <text class="val" id="voltval-${p}" x="128" y="62" text-anchor="start">-- kV</text>
+
+    <!-- bus to breaker -->
+    <line class="wire live" x1="120" y1="90" x2="178" y2="90"></line>
+
+    <!-- tie-line breaker -->
+    <rect class="brk" id="brk-${p}" x="178" y="78" width="24" height="24" rx="3"></rect>
+    <text class="cap" x="190" y="120" text-anchor="middle">Breaker</text>
+    <text class="state" id="brkstate-${p}" x="190" y="70" text-anchor="middle">--</text>
+
+    <!-- tie line to the neighbor (energized only when the breaker is closed) -->
+    <line class="wire" id="tieR-${p}" x1="202" y1="90" x2="372" y2="90"></line>
+    <line class="flowdash hidden" id="flowdash-${p}" x1="202" y1="90" x2="372" y2="90"></line>
+    <polygon class="flow-arrow hidden" id="flowarrow-${p}" points="280,84 296,90 280,96"></polygon>
+    <text class="val" id="flowval-${p}" x="287" y="74" text-anchor="middle">-- MW</text>
+    <text class="cap" x="287" y="120" text-anchor="middle">Tie line</text>
+
+    <!-- neighbor busbar (BUS B) and demand -->
+    <line class="bus" id="busR-${p}" x1="372" y1="50" x2="372" y2="130"></line>
+    <text class="busname" x="372" y="42" text-anchor="middle">BUS B</text>
+    <line class="wire" id="neigh-${p}" x1="372" y1="90" x2="412" y2="90"></line>
+    <polygon class="load" id="load-${p}" points="406,96 418,96 412,110"></polygon>
+    <text class="cap" x="410" y="126" text-anchor="middle">Neighbor</text>
   </svg>`;
 }
 
 function setText(id, txt) { const e = document.getElementById(id); if (e) e.textContent = txt; }
-function setClass(id, cls) { const e = document.getElementById(id); if (e) e.setAttribute("class", cls); }
+function show(id, on) { const e = document.getElementById(id); if (e) e.classList.toggle("hidden", !on); }
 
 function fmt(v, digits) {
-  return (v === null || v === undefined) ? "–" : Number(v).toFixed(digits);
+  return (v === null || v === undefined) ? "--" : Number(v).toFixed(digits);
 }
 
-// vals: {tm1, tm2, ts1, ts2} ; changed: {tmX: bool} ; live: bool (energized)
+// vals: {tm1, tm2, ts1, ts2}; changed: {tmX: bool} or null
 function renderStation(p, vals, changed) {
-  const flow = vals.tm1, volt = vals.tm2, closed = (vals.ts1 === 1), rstat = (vals.ts2 === 1);
+  const flow = vals.tm1, volt = vals.tm2;
+  const closed = (vals.ts1 === 1);
   const over = (flow !== null && flow !== undefined && Math.abs(flow) > THRESH_MW);
-  const energized = closed;
 
-  // flow value + direction arrow
-  const flowCls = "val" + (over ? " over" : (changed && changed.tm1 ? " changed" : ""));
-  setText(`flow-${p}`, (flow === null ? "–" : fmt(flow, 1)) + " MW");
-  setClass(`flow-${p}`, flowCls);
-  const positive = (flow || 0) >= 0;
-  const arr = document.getElementById(`arr-${p}`);
+  // power flow value + colour
+  setText(`flowval-${p}`, (flow === null || flow === undefined ? "--" : fmt(flow, 1)) + " MW");
+  const fv = document.getElementById(`flowval-${p}`);
+  if (fv) fv.setAttribute("class", "val" + (over ? " over" : (changed && changed.tm1 ? " changed" : "")));
+
+  // voltage value + colour
+  setText(`voltval-${p}`, (volt === null || volt === undefined ? "--" : fmt(volt, 1)) + " kV");
+  const vv = document.getElementById(`voltval-${p}`);
+  if (vv) vv.setAttribute("class", "val" + (changed && changed.tm2 ? " changed" : ""));
+
+  // breaker symbol + word
+  const brk = document.getElementById(`brk-${p}`);
+  if (brk) brk.setAttribute("class", "brk " + (closed ? "closed" : "open"));
+  setText(`brkstate-${p}`, closed ? "CLOSED" : "OPEN");
+
+  // energize the tie side only when the breaker is closed
+  ["tieR", "neigh"].forEach(w => {
+    const e = document.getElementById(`${w}-${p}`);
+    if (e) e.setAttribute("class", "wire" + (closed ? " live" : ""));
+  });
+  const busR = document.getElementById(`busR-${p}`);
+  if (busR) busR.setAttribute("class", "bus" + (closed ? " live" : ""));
+  const load = document.getElementById(`load-${p}`);
+  if (load) load.setAttribute("class", "load" + (closed ? " live" : ""));
+
+  // moving dashes + direction arrow only when energized
+  show(`flowdash-${p}`, closed);
+  show(`flowarrow-${p}`, closed);
+  const arr = document.getElementById(`flowarrow-${p}`);
   if (arr) {
-    arr.setAttribute("points", positive ? "224,86 240,92 224,98" : "240,86 224,92 240,98");
-    arr.setAttribute("class", "flow-arrow" + (over ? " over" : ""));
+    const positive = (flow || 0) >= 0;
+    arr.setAttribute("points", positive ? "280,84 296,90 280,96" : "296,84 280,90 296,96");
+    arr.setAttribute("class", "flow-arrow" + (over ? " over" : "") + (closed ? "" : " hidden"));
   }
-
-  // voltage
-  setText(`volt-${p}`, (volt === null ? "–" : fmt(volt, 1)) + " kV");
-  setClass(`volt-${p}`, "val" + (changed && changed.tm2 ? " changed" : ""));
-
-  // breaker + energization
-  setClass(`brk-${p}`, "brk-box " + (closed ? "closed" : "open"));
-  setText(`brklbl-${p}`, closed ? "CLOSED" : "OPEN");
-  ["gw", "tw1", "tw2"].forEach(w => setClass(`${w}-${p}`, "wire" + (energized ? "" : " de")));
-  setClass(`bus-${p}`, "bus" + (energized ? "" : " de"));
-  const rs = document.getElementById(`rstat-${p}`);
-  if (rs) rs.setAttribute("fill", rstat ? "#34c759" : "#4a5763");
+  const dash = document.getElementById(`flowdash-${p}`);
+  if (dash) dash.setAttribute("class", "flowdash" + (closed ? "" : " hidden") + ((flow || 0) < 0 ? " rev" : ""));
 }
 
 // ---- state -> view --------------------------------------------------------
 
 function currentA(p) {
   // Station A shows the operator's local value: the manual setpoint if pinned,
-  // otherwise the current server value (which is what Station B is receiving).
+  // otherwise the live server value (which is what Station B is receiving).
   const pt = state.points[p];
   if (pt && pt.mode === "manual" && pt.setpoint !== null) return pt.setpoint;
   return state.stationB[p];
@@ -88,23 +115,23 @@ function render() {
   if (!state) return;
   if (state.lab && typeof state.lab.threshold === "number") THRESH_MW = state.lab.threshold;
 
-  // connection status
+  // data-link status, in plain words
   const up = state.online && state.online.A && state.online.B;
   const conn = document.getElementById("conn");
-  conn.textContent = up ? `ICCP linked · ${state.server.host}:${state.server.port}` : "ICCP link down";
-  conn.className = "conn " + (up ? "up" : "down");
+  conn.textContent = up ? "Linked to Station B" : "Data link down";
+  conn.className = "link-pill " + (up ? "up" : "down");
 
-  // Station A (intent / local)
+  // Station A (what the operator is sending)
   renderStation("A", {
     tm1: currentA("tm1"), tm2: currentA("tm2"),
     ts1: currentA("ts1"), ts2: currentA("ts2"),
   }, null);
 
-  // mode badges + input placeholders
+  // mode badges + input hints
   ["tm1", "tm2", "ts1"].forEach(p => {
     const pt = state.points[p] || { mode: "auto" };
     const m = document.getElementById(`modeA-${p}`);
-    if (m) { m.textContent = pt.mode.toUpperCase(); m.className = "mode " + pt.mode; }
+    if (m) { m.textContent = pt.mode === "manual" ? "MANUAL" : "AUTO"; m.className = "mode " + pt.mode; }
     const inp = document.getElementById(`inA-${p}`);
     if (inp && document.activeElement !== inp) {
       const v = currentA(p);
@@ -112,7 +139,7 @@ function render() {
     }
   });
 
-  // Station B (received over ICCP) + changed-from-baseline highlight
+  // Station B (only what arrived over the link) + changed-from-normal highlight
   const b = state.stationB, base = b.baseline || {};
   const changed = {};
   ["tm1", "tm2"].forEach(p => {
@@ -120,40 +147,41 @@ function render() {
   });
   renderStation("B", { tm1: b.tm1, tm2: b.tm2, ts1: b.ts1, ts2: b.ts2 }, changed);
 
-  // reporting status
-  setText("rep-ts", state.meta.transferset + (b.report_count > 0 ? " (enabled)" : ""));
+  // data feed status
+  setText("rep-link", b.report_count > 0 ? "receiving updates" : "waiting for first update");
   setText("rep-count", b.report_count);
-  setText("rep-time", b.last_report_time || "–");
-  setText("rep-cond", condName(b.cond));
+  setText("rep-time", b.last_report_time || "none yet");
+  setText("rep-cond", reason(b.cond));
 
-  // overflow banner (the visible power-flow condition)
+  // over-the-limit warning
   const over = (b.tm1 !== null && b.tm1 !== undefined && Math.abs(b.tm1) > THRESH_MW);
-  document.getElementById("overflow").classList.toggle("hidden", !over);
+  show("overflow", over);
   setText("thresh", THRESH_MW);
 
-  // lab marker 2: revealed on the HMI once the server confirms the power-flow
-  // condition (only present on the lab branch).
+  // training validation marker, revealed once the server confirms the power-flow
+  // condition (only present in the lab build)
   const m2 = state.lab && state.lab.marker2;
   const revealed = !!(m2 && m2.revealed && m2.value);
-  document.getElementById("marker2").classList.toggle("hidden", !revealed);
+  show("marker2", revealed);
   if (revealed) setText("marker2-flag", m2.value);
 
-  // inspector
-  setText("i-version", state.meta.version || "–");
-  setText("i-features", state.meta.features || "–");
-  setText("i-blt", state.meta.blt || "–");
-  setText("i-next", state.meta.next_ts || "–");
+  // behind-the-scenes object model
+  setText("i-version", state.meta.version || "--");
+  setText("i-features", state.meta.features || "--");
+  setText("i-blt", state.meta.blt || "--");
+  setText("i-next", state.meta.next_ts || "--");
   setText("i-dataset", state.meta.dataset);
   setText("i-ts", state.meta.transferset);
 }
 
-function condName(c) {
-  if (c === null || c === undefined) return "–";
+// Translate the protocol's update-trigger code into plain words.
+function reason(c) {
+  if (c === null || c === undefined) return "--";
   const parts = [];
-  if (c & 0x02) parts.push("integrity");
-  if (c & 0x04) parts.push("change");
-  if (c & 0x01) parts.push("interval");
-  return parts.length ? parts.join("+") : String(c);
+  if (c & 0x02) parts.push("scheduled refresh");
+  if (c & 0x04) parts.push("a value changed");
+  if (c & 0x01) parts.push("timed update");
+  return parts.length ? parts.join(", ") : "update";
 }
 
 // ---- control actions ------------------------------------------------------
@@ -164,7 +192,7 @@ async function control(body) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-  } catch (e) { /* SSE will resync */ }
+  } catch (e) { /* the live feed will resync */ }
 }
 
 function wireControls() {
@@ -199,7 +227,7 @@ function init() {
   es.onmessage = ev => { try { state = JSON.parse(ev.data); render(); } catch (e) {} };
   es.onerror = () => {
     const conn = document.getElementById("conn");
-    conn.textContent = "stream reconnecting…"; conn.className = "conn down";
+    conn.textContent = "reconnecting..."; conn.className = "link-pill down";
   };
 }
 

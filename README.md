@@ -190,6 +190,34 @@ This is a **closed lab simulator**. Every value is synthetic, it controls no rea
 infrastructure, and it connects to nothing outside the lab. Station A/B, the
 breaker, the tie-line flow, the voltage and all markers are training artifacts.
 
+### Watching the loopback traffic in Wireshark
+
+When you run `50_run_hmi.sh`, the HMI's clients (and any Caldera/C client you point
+at it) all talk to the server over loopback on port 10502. Two settings trip
+people up, so set both or you will see nothing:
+
+1. Capture on the **loopback interface (`lo`)**, not a physical NIC. All the
+   traffic is on `127.0.0.1`, so capturing on `eth0`/`wlan0` shows nothing.
+2. Wireshark only auto-decodes MMS on TCP port 102. On 10502 you have to tell it:
+   right-click any packet on that port, choose **Decode As...**, and in the
+   **Current** column (not the Value column) set TCP port `10502` to **TPKT**.
+   Pick TPKT, not MMS; TPKT pulls up the rest of the stack itself (COTP, Session,
+   Presentation, ACSE, MMS).
+
+Start the capture **before** launching the HMI if you want to catch the initial
+association (COTP CR/CC, the MMS initiate, and the `Bilateral_Table_ID` read that
+is the bilateral agreement). Then use these filters:
+
+```text
+tcp.port == 10502
+mms                              # all TASE.2 / MMS PDUs
+mms.unconfirmed                  # the live Block 2 report stream
+mms.confirmedServiceRequest      # reads/writes you drive from the HMI or Caldera
+```
+
+(The `Capturing a pcap` section below is the namespace lab, which runs on port 102
+where Wireshark auto-decodes MMS with no Decode As step.)
+
 ## Capturing a pcap
 
 These use network namespaces, so they need sudo (the scripts call it for you).

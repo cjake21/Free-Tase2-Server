@@ -16,7 +16,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body {
-  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font: 14px/1.45 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--ink);
   background:
     radial-gradient(1100px 500px at 18% -8%, #16273a 0%, transparent 60%),
@@ -42,26 +42,17 @@ header {
   border: 2px solid #06121d; border-radius: 3px;
   clip-path: polygon(0 60%, 35% 60%, 50% 20%, 65% 80%, 80% 45%, 100% 45%, 100% 100%, 0 100%);
 }
-h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+h1 { font-size: 16px; margin: 0; font-weight: 600; }
 .tagline { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
 
-.link-pill {
-  font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px;
-  border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+/* compact, flat system-status label (no indicator light) */
+.sysstat {
+  font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+  padding: 5px 11px; border: 1px solid var(--line); border-radius: 4px;
+  color: var(--muted); background: var(--panel); white-space: nowrap;
 }
-.link-pill.up { color: var(--ok); border-color: rgba(46,224,106,.5); background: rgba(46,224,106,.08); }
-.link-pill.up::before {
-  content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--ok); margin-right: 7px; box-shadow: 0 0 8px var(--ok);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-.link-pill.down { color: var(--alarm); border-color: rgba(255,77,77,.5); background: rgba(255,77,77,.08); }
-@keyframes pulse { 50% { opacity: .35; } }
-
-.safety {
-  margin: 0 22px; padding: 8px 13px; border-radius: 8px; font-size: 12px;
-  color: #ffe2b0; background: rgba(255,160,51,.10); border: 1px solid rgba(255,160,51,.32);
-}
+.sysstat.up { color: #79c79a; border-color: #2f4a3b; }
+.sysstat.down { color: #c98686; border-color: #4a2f2f; }
 
 /* legend */
 .legend {
@@ -69,7 +60,7 @@ h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
   margin: 12px 22px 0; padding: 10px 14px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
 }
-.legend-title { font-weight: 650; font-size: 12.5px; margin-right: 4px; }
+.legend-title { font-weight: 600; font-size: 12.5px; margin-right: 4px; }
 .leg { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
 .sw { width: 16px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
 .sw.gen { border-radius: 50%; width: 13px; height: 13px; border: 2px solid var(--ink); background: transparent; }
@@ -119,7 +110,7 @@ main {
 .brk.open { fill: none; stroke: var(--warn); stroke-width: 2.5; }
 .load { fill: var(--dead); }
 .load.live { fill: var(--ok); }
-.val { fill: var(--ink); font-size: 13px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+.val { fill: var(--ink); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .val.changed { fill: var(--accent); }
 .val.over { fill: var(--alarm); }
 
@@ -146,7 +137,7 @@ main {
 .ctl-row.breaker { grid-template-columns: 1fr auto auto auto; }
 .ctl-label span { font-size: 13px; font-weight: 600; }
 .ctl-label small { display: block; font-size: 10.5px; color: var(--muted); }
-.mode { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 5px; letter-spacing: .5px; }
+.mode { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; letter-spacing: .5px; }
 .mode.auto { background: rgba(73,179,255,.16); color: var(--accent); }
 .mode.manual { background: rgba(255,160,51,.2); color: var(--warn); }
 
@@ -156,7 +147,7 @@ input[type=number] {
 }
 button {
   background: var(--accent); color: #05121e; border: 0; border-radius: 6px;
-  padding: 7px 12px; font-size: 12.5px; font-weight: 650; cursor: pointer;
+  padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
   white-space: nowrap;
 }
 button:hover { filter: brightness(1.08); }
@@ -169,7 +160,7 @@ button.warn { background: var(--warn); }
 .feed-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px;
   border-bottom: 1px solid var(--line); padding: 4px 0; }
 .feed-row span { color: var(--muted); }
-.feed-row b { font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
+.feed-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .warn-banner {
   margin-top: 12px; padding: 9px 13px; font-size: 12.5px; font-weight: 600;
@@ -183,10 +174,10 @@ button.warn { background: var(--warn); }
   background: linear-gradient(180deg, rgba(46,224,106,.16), rgba(46,224,106,.05));
   border: 1px solid var(--ok); animation: marker-in .45s ease-out;
 }
-.marker-title { font-weight: 750; color: var(--ok); font-size: 13px; letter-spacing: .3px; }
+.marker-title { font-weight: 600; color: var(--ok); font-size: 13px; letter-spacing: .3px; }
 .marker-sub { font-size: 11.5px; color: var(--muted); margin: 3px 0 9px; }
 .marker-flag {
-  font-family: ui-monospace, Menlo, monospace; font-size: 15px; font-weight: 700;
+  font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 15px; font-weight: 700;
   color: #eafff1; background: #0a131c; border: 1px dashed var(--ok);
   border-radius: 7px; padding: 9px 11px; word-break: break-all; user-select: all;
 }
@@ -197,10 +188,10 @@ button.warn { background: var(--warn); }
   margin: 14px 22px 26px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 11px; padding: 4px 16px 10px;
 }
-.inspector summary { cursor: pointer; padding: 10px 0; font-weight: 650; }
+.inspector summary { cursor: pointer; padding: 10px 0; font-weight: 600; }
 .insp-note { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
 .insp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 18px; padding-bottom: 6px; }
 .insp-grid div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px;
   border-bottom: 1px solid var(--line); padding: 4px 0; }
 .insp-grid span { color: var(--muted); }
-.insp-grid b { font-family: ui-monospace, Menlo, monospace; font-weight: 500; text-align: right; }
+.insp-grid b { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }

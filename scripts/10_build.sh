@@ -16,12 +16,38 @@ PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPS_DIR="${DEPS_DIR:-$PROJECT/deps}"
 LIB="$DEPS_DIR/libiec61850"
 
+# Pin libIEC61850 to a known-good tag. The patches below (and the TASE.2 read
+# path) are written against this version; the default branch drifts and breaks
+# them (e.g. mms_read_service.c no longer matches the patch-2 regex). Override
+# with LIB61850_VERSION=... if you know what you're doing.
+LIB61850_VERSION="${LIB61850_VERSION:-v1.6.1}"
+
+# libIEC61850 needs an mbedtls SOURCE tree under third_party/ to compile TLS /
+# Secure ICCP support. It is NOT vendored in libIEC61850's git (only a README),
+# so we download it here. Without it the lib builds with no TLS and the server
+# fails to link (undefined TLSConfiguration_* symbols). 2.28 gives TLS <=1.2.
+MBEDTLS_VERSION="${MBEDTLS_VERSION:-2.28.8}"
+
 mkdir -p "$DEPS_DIR"
 
 if [[ ! -d "$LIB" ]]; then
-  git clone https://github.com/mz-automation/libiec61850.git "$LIB"
+  git clone --depth 1 --branch "$LIB61850_VERSION" \
+    https://github.com/mz-automation/libiec61850.git "$LIB"
 else
-  git -C "$LIB" pull --ff-only || true
+  # Make sure an existing checkout is on the pinned tag.
+  git -C "$LIB" fetch --tags --depth 1 origin "$LIB61850_VERSION" || true
+  git -C "$LIB" checkout -q "$LIB61850_VERSION" || true
+fi
+
+# --- patch 0: fetch mbedtls source for TLS support ---
+MBEDTLS_DIR="$LIB/third_party/mbedtls/mbedtls-2.28"
+if [[ ! -d "$MBEDTLS_DIR" ]]; then
+  echo "[patch] downloading mbedtls $MBEDTLS_VERSION source for TLS support"
+  tmp_tgz="$(mktemp)"
+  curl -fsSL "https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v${MBEDTLS_VERSION}.tar.gz" -o "$tmp_tgz"
+  tar xzf "$tmp_tgz" -C "$LIB/third_party/mbedtls"
+  mv "$LIB/third_party/mbedtls/mbedtls-${MBEDTLS_VERSION}" "$MBEDTLS_DIR"
+  rm -f "$tmp_tgz"
 fi
 
 # --- patch 1: enable VMD-scope named variables ---
